@@ -1,0 +1,54 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # 每日香港時間 08:45 (UTC 00:45) 及 20:00 (UTC 12:00) 各執行一次
+    - cron: '45 0 * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 容許你隨時手動撳掣測試
+
+jobs:
+  wake-up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium
+
+      - name: Visit and Wake Streamlit App
+        run: |
+          python - << 'EOF'
+          from playwright.sync_api import sync_playwright
+          import time
+
+          URLS = [
+              "https://hk-vpa-dashboard.streamlit.app",
+              # 如想順便幫其他 Dashboard 保持清醒，可喺下面另起一行加網址（記得加引號同逗號）
+          ]
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              for url in URLS:
+                  print(f"正在訪問 {url} ...")
+                  try:
+                      page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                      time.sleep(10)
+                      btn = page.locator("button", has_text="get this app back up")
+                      if btn.count() > 0:
+                          print("發現休眠畫面，正在點擊喚醒掣...")
+                          btn.first.click()
+                          time.sleep(35)
+                          print("已發送喚醒指令。")
+                      else:
+                          print("App 運作正常，未有休眠。")
+                  except Exception as e:
+                      print(f"處理 {url} 時出錯: {e}")
+              browser.close()
+          EOF
